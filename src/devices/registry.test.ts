@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { DEVICE_DRIVERS } from "./registry.ts";
+import { DEVICE_DRIVERS, clientSupportScore, createSupportedClient, deviceBrand } from "./registry.ts";
 import { SUPPORTED_HID_FILTERS, VENDOR_ID } from "./vendors.ts";
 
 const DEVICES_DIR = dirname(fileURLToPath(import.meta.url));
@@ -148,6 +148,64 @@ test("every product id offered in the picker has a driver", () => {
     [],
     "These ids are offered in the browser picker but no driver accepts them, so the device connects and then fails to read.",
   );
+});
+
+// Frozen contract: the class each driver resolves to, plus its brand and
+// priority score. These are the values a future registry refactor could
+// silently change (a wrong score argument reorders drivers; a wrong brand
+// relabels the sidebar). If a change is deliberate, update this table.
+const EXPECTED_RESOLUTION: Record<string, { brand: string; score: number | null }> = {
+  FinalmouseHidClient: { brand: "Finalmouse", score: 10 },
+  EggOp1HidClient: { brand: "Endgame Gear", score: 10 },
+  EggWeHidClient: { brand: "Endgame Gear", score: null },
+  PulsarProHidClient: { brand: "Pulsar", score: 8 },
+  PulsarHidClient: { brand: "Pulsar", score: 7 },
+  TeevolutionHidClient: { brand: "Teevolution", score: 7 },
+  VgnF2HidClient: { brand: "VGN", score: 7 },
+  LogitechHidppClient: { brand: "Logitech", score: 6 },
+  WLMouseHidClient: { brand: "WLMouse", score: 5 },
+  LamzuHidClient: { brand: "Lamzu", score: 5 },
+  OrbitalHidClient: { brand: "Orbital", score: 6 },
+  RazerHidClient: { brand: "Razer", score: 6 },
+  RazerViperMiniHidClient: { brand: "Razer", score: 6 },
+  AtkHidClient: { brand: "ATK", score: 5 },
+  RazerViperV4ProHidClient: { brand: "Razer", score: 7 },
+};
+
+test("registered drivers keep their brand and priority score", () => {
+  const resolved = new Map<string, { vendorId: number; productId: number; collections: HIDCollectionInfo[] }>();
+  for (const vendorId of VENDOR_IDS) {
+    for (const productId of PRODUCT_IDS) {
+      for (const collections of SHAPES) {
+        const mutable = probe as unknown as { vendorId: number; productId: number; collections: HIDCollectionInfo[] };
+        mutable.vendorId = vendorId;
+        mutable.productId = productId;
+        mutable.collections = collections;
+        const client = createSupportedClient(probe);
+        if (client && !resolved.has(client.constructor.name)) {
+          resolved.set(client.constructor.name, { vendorId, productId, collections });
+        }
+        if (resolved.size >= Object.keys(EXPECTED_RESOLUTION).length) break;
+      }
+    }
+  }
+
+  for (const [name, expected] of Object.entries(EXPECTED_RESOLUTION)) {
+    const snapshot = resolved.get(name);
+    assert.ok(snapshot, `${name} was never reached by the probe matrix; fix its isSupported or remove it from EXPECTED_RESOLUTION.`);
+    const device = { ...probe, ...snapshot } as unknown as HIDDevice;
+    const client = createSupportedClient(device);
+    assert.ok(client, `${name} stopped resolving.`);
+    assert.equal(client.constructor.name, name);
+    assert.equal(deviceBrand(client), expected.brand, `${name} brand changed.`);
+    if (expected.score !== null) {
+      assert.equal(clientSupportScore(device), expected.score, `${name} priority score changed.`);
+    }
+  }
+
+  for (const name of resolved.keys()) {
+    assert.ok(name in EXPECTED_RESOLUTION, `${name} resolved but is not in EXPECTED_RESOLUTION; add it so its score is locked.`);
+  }
 });
 
 const WITHOUT_TESTS = new Set(["lamzu", "pulsar", "teevolution"]);

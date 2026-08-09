@@ -13,36 +13,42 @@ import { RazerViperV4ProHidClient } from "./razer/viper-v4-pro-hid.ts";
 import { TeevolutionHidClient } from "./teevolution/hid.ts";
 import { VgnF2HidClient } from "./vgn/hid.ts";
 import { WLMouseHidClient } from "./wlmouse/hid.ts";
+import { defineDriver } from "./driver.ts";
 
 export type PulsarClient = PulsarHidClient | PulsarProHidClient;
 export type SupportedClient = LogitechHidppClient | PulsarClient | EggOp1HidClient | EggWeHidClient | FinalmouseHidClient | WLMouseHidClient | LamzuHidClient | OrbitalHidClient | RazerHidClient | RazerViperMiniHidClient | RazerViperV4ProHidClient | TeevolutionHidClient | AtkHidClient | VgnF2HidClient;
 
-export interface DeviceDriver {
-  brand: string;
-  supports(device: HIDDevice): boolean;
-  create(device: HIDDevice): SupportedClient | null;
-  score(device: HIDDevice): number;
-}
-
-export const DEVICE_DRIVERS: readonly DeviceDriver[] = [
-  { brand: "Finalmouse", supports: (device) => FinalmouseHidClient.isSupported(device), create: (device) => new FinalmouseHidClient(device), score: () => 10 },
-  { brand: "Endgame Gear", supports: (device) => EggOp1HidClient.isSupported(device), create: (device) => new EggOp1HidClient(device), score: () => 10 },
-  { brand: "Endgame Gear", supports: eggWeIsSupported, create: eggWeCreate, score: eggWeSupportScore },
-  { brand: "Pulsar", supports: (device) => PulsarProHidClient.isSupported(device), create: (device) => new PulsarProHidClient(device), score: () => 8 },
-  { brand: "Pulsar", supports: (device) => PulsarHidClient.isSupported(device), create: (device) => new PulsarHidClient(device), score: () => 7 },
-  { brand: "Teevolution", supports: (device) => TeevolutionHidClient.isSupported(device), create: (device) => new TeevolutionHidClient(device), score: () => 7 },
-  { brand: "VGN", supports: (device) => VgnF2HidClient.isSupported(device), create: (device) => new VgnF2HidClient(device), score: () => 7 },
-  { brand: "Logitech", supports: (device) => LogitechHidppClient.isSupported(device), create: (device) => new LogitechHidppClient(device), score: () => 6 },
-  { brand: "WLMouse", supports: (device) => WLMouseHidClient.isSupported(device), create: (device) => new WLMouseHidClient(device), score: () => 5 },
-  { brand: "Lamzu", supports: (device) => LamzuHidClient.isSupported(device), create: (device) => new LamzuHidClient(device), score: () => 5 },
-  { brand: "Orbital", supports: (device) => OrbitalHidClient.isSupported(device), create: (device) => new OrbitalHidClient(device), score: () => 6 },
-  { brand: "Razer", supports: (device) => RazerHidClient.isSupported(device), create: (device) => new RazerHidClient(device), score: () => 6 },
-  { brand: "Razer", supports: (device) => RazerViperMiniHidClient.isSupported(device), create: (device) => new RazerViperMiniHidClient(device), score: () => 6 },
-  { brand: "ATK", supports: (device) => AtkHidClient.isSupported(device), create: (device) => new AtkHidClient(device), score: () => 5 },
-  { brand: "Razer", supports: (device) => RazerViperV4ProHidClient.isSupported(device), create: (device) => new RazerViperV4ProHidClient(device), score: () => 7 },
+/**
+ * Ordered list of device drivers. `driverFor` returns the first driver whose
+ * `supports()` accepts a device, so earlier entries win ties between brands.
+ *
+ * A new vendor is one `defineDriver(...)` line here plus a WebHID filter in
+ * `./vendors.ts`. See `src/devices/_template/` and `docs/adding-a-vendor.md`.
+ */
+export const DEVICE_DRIVERS = [
+  defineDriver("Finalmouse", FinalmouseHidClient, 10),
+  defineDriver("Endgame Gear", EggOp1HidClient, 10),
+  {
+    brand: "Endgame Gear",
+    supports: eggWeIsSupported,
+    create: eggWeCreate,
+    score: eggWeSupportScore,
+  },
+  defineDriver("Pulsar", PulsarProHidClient, 8),
+  defineDriver("Pulsar", PulsarHidClient, 7),
+  defineDriver("Teevolution", TeevolutionHidClient, 7),
+  defineDriver("VGN", VgnF2HidClient, 7),
+  defineDriver("Logitech", LogitechHidppClient, 6),
+  defineDriver("WLMouse", WLMouseHidClient, 5),
+  defineDriver("Lamzu", LamzuHidClient, 5),
+  defineDriver("Orbital", OrbitalHidClient, 6),
+  defineDriver("Razer", RazerHidClient, 6),
+  defineDriver("Razer", RazerViperMiniHidClient, 6),
+  defineDriver("ATK", AtkHidClient, 5),
+  defineDriver("Razer", RazerViperV4ProHidClient, 7),
 ];
 
-function driverFor(device: HIDDevice): DeviceDriver | undefined {
+function driverFor(device: HIDDevice) {
   return DEVICE_DRIVERS.find((driver) => driver.supports(device));
 }
 
